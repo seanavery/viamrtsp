@@ -9,7 +9,7 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-decoder=hevc \
                --enable-swscale
 
-.PHONY: build-ffmpeg
+.PHONY: build-ffmpeg test lint updaterdk module
 
 bin/viamrtsp: build-ffmpeg *.go cmd/module/*.go
 	PKG_CONFIG_PATH=$(FFMPEG_PREFIX)/lib/pkgconfig \
