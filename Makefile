@@ -1,4 +1,4 @@
-UNAME_S := $(shell uname -s)
+UNAME_S ?= $(shell uname -s)
 FFMPEG_PREFIX ?= $(shell pwd)/ffmpeg/$(UNAME_S)-$(shell uname -m)
 FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-static \
