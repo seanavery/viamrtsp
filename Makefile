@@ -1,4 +1,5 @@
-FFMPEG_PREFIX ?= $(shell pwd)/ffmpeg/$(shell uname -s)-$(shell uname -m)
+UNAME_S := $(shell uname -s)
+FFMPEG_PREFIX ?= $(shell pwd)/ffmpeg/$(UNAME_S)-$(shell uname -m)
 FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-static \
                --disable-shared \
@@ -8,13 +9,18 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-decoder=h264 \
                --enable-decoder=hevc \
                --enable-swscale
+ifeq ($(UNAME_S),Linux)
+    CGO_LDFLAGS := "-L$(FFMPEG_PREFIX)/lib -l:libjpeg.a"
+else
+    CGO_LDFLAGS := -L$(FFMPEG_PREFIX)/lib
+endif
 
 .PHONY: build-ffmpeg test lint updaterdk module
 
 bin/viamrtsp: build-ffmpeg *.go cmd/module/*.go
 	PKG_CONFIG_PATH=$(FFMPEG_PREFIX)/lib/pkgconfig \
 		CGO_CFLAGS=-I$(FFMPEG_PREFIX)/include \
-		CGO_LDFLAGS="-L$(FFMPEG_PREFIX)/lib -l:libjpeg.a" \
+		CGO_LDFLAGS=$(CGO_LDFLAGS) \
 		go build -o bin/viamrtsp cmd/module/cmd.go
 
 test:
