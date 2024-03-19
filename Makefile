@@ -22,7 +22,7 @@ endif
 bin/viamrtsp: build-ffmpeg *.go cmd/module/*.go
 	PKG_CONFIG_PATH=$(FFMPEG_PREFIX)/lib/pkgconfig \
 		CGO_CFLAGS=-I$(FFMPEG_PREFIX)/include \
-		CGO_LDFLAGS=$(CGO_LDFLAGS) \
+		CGO_LDFLAGS="-L$(FFMPEG_PREFIX)/lib -l:libjpeg.a" \
 		go build -o bin/viamrtsp cmd/module/cmd.go
 
 test:
