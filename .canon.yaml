@@ -1,7 +1,8 @@
-viamrtsp:
-    image_amd64: ghcr.io/viamrobotics/antique2:amd64-cache
-    image_arm64: ghcr.io/viamrobotics/antique2:arm64-cache
-    update_interval: 24h0m0s
-    persistent: true
+rtsp:
+    image_amd64: ghcr.io/viamrobotics/canon:amd64
+    image_arm64: ghcr.io/viamrobotics/canon:arm64
+    minimum_date: 2022-12-20T18:49:25.781750658Z
+    update_interval: 168h0m0s
+    persistent: false
     user: testbot
     group: testbot
