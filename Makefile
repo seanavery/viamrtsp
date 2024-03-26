@@ -12,9 +12,9 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-swscale
 CGO_LDFLAGS := -L$(FFMPEG_PREFIX)/lib
 ifeq ($(UNAME_S),Linux)
-    ifneq ($(shell find / -name libjpeg.a 2> /dev/null),)
-        CGO_LDFLAGS := "$(CGO_LDFLAGS) -l:libjpeg.a"
-    endif
+ifneq ($(shell find / -name libjpeg.a 2> /dev/null),)
+    CGO_LDFLAGS := "$(CGO_LDFLAGS) -l:libjpeg.a"
+endif
 endif
 
 .PHONY: build-ffmpeg test lint updaterdk module
@@ -38,11 +38,16 @@ updaterdk:
 FFmpeg:
 	git clone https://github.com/FFmpeg/FFmpeg.git --depth 1 --branch release/6.1
 
-build-ffmpeg: FFmpeg
+$(FFMPEG_PREFIX): FFmpeg
+	cd FFmpeg && ./configure $(FFMPEG_OPTS) && make -j$(shell nproc) && make install
+
+build-ffmpeg:
+ifeq ($(UNAME_S),Linux)
 ifeq ($(UNAME_M),x86_64)
 	which nasm || (sudo apt update && sudo apt install -y nasm)
 endif
-	cd FFmpeg && ./configure $(FFMPEG_OPTS) && make -j$(shell nproc) && make install
+endif
+	$(MAKE) $(FFMPEG_PREFIX)
 
 module: bin/viamrtsp
 	tar czf module.tar.gz bin/viamrtsp
