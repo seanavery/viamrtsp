@@ -13,7 +13,7 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
 CGO_LDFLAGS := -L$(FFMPEG_PREFIX)/lib
 ifeq ($(UNAME_S),Linux)
 ifneq ($(shell find / -name libjpeg.a 2> /dev/null),)
-    CGO_LDFLAGS := "$(CGO_LDFLAGS) -l:libjpeg.a"
+	CGO_LDFLAGS := "$(CGO_LDFLAGS) -l:libjpeg.a"
 endif
 endif
 
