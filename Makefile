@@ -1,5 +1,6 @@
 UNAME_S ?= $(shell uname -s)
-FFMPEG_PREFIX ?= $(shell pwd)/ffmpeg/$(UNAME_S)-$(shell uname -m)
+UNAME_M ?= $(shell uname -m)
+FFMPEG_PREFIX ?= $(shell pwd)/ffmpeg/$(UNAME_S)-$(UNAME_M)
 FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-static \
                --disable-shared \
@@ -9,6 +10,9 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-decoder=h264 \
                --enable-decoder=hevc \
                --enable-swscale
+ifeq ($(UNAME_M),x86_64)
+    FFMPEG_OPTS += --disable-x86asm
+endif
 ifeq ($(UNAME_S),Linux)
     CGO_LDFLAGS := "-L$(FFMPEG_PREFIX)/lib -l:libjpeg.a"
 else
