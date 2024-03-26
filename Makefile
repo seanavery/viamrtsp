@@ -10,10 +10,11 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-decoder=h264 \
                --enable-decoder=hevc \
                --enable-swscale
+CGO_LDFLAGS := -L$(FFMPEG_PREFIX)/lib
 ifeq ($(UNAME_S),Linux)
-    CGO_LDFLAGS := "-L$(FFMPEG_PREFIX)/lib -l:libjpeg.a"
-else
-    CGO_LDFLAGS := -L$(FFMPEG_PREFIX)/lib
+    ifneq ($(shell find / -name libjpeg.a 2> /dev/null),)
+        CGO_LDFLAGS := "$(CGO_LDFLAGS) -l:libjpeg.a"
+    endif
 endif
 
 .PHONY: build-ffmpeg test lint updaterdk module
@@ -39,7 +40,7 @@ FFmpeg:
 
 build-ffmpeg: FFmpeg
 ifeq ($(UNAME_M),x86_64)
-	which nasm || sudo apt update && sudo apt install -y nasm
+	which nasm || (sudo apt update && sudo apt install -y nasm)
 endif
 	cd FFmpeg && ./configure $(FFMPEG_OPTS) && make -j$(shell nproc) && make install
 
