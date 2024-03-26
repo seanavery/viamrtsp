@@ -10,9 +10,6 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_PREFIX) \
                --enable-decoder=h264 \
                --enable-decoder=hevc \
                --enable-swscale
-ifeq ($(UNAME_M),x86_64)
-    FFMPEG_OPTS += --disable-x86asm
-endif
 ifeq ($(UNAME_S),Linux)
     CGO_LDFLAGS := "-L$(FFMPEG_PREFIX)/lib -l:libjpeg.a"
 else
@@ -41,6 +38,9 @@ FFmpeg:
 	git clone https://github.com/FFmpeg/FFmpeg.git --depth 1 --branch release/6.1
 
 build-ffmpeg: FFmpeg
+ifeq ($(UNAME_M),x86_64)
+	which nasm || sudo apt update && sudo apt install -y nasm
+endif
 	cd FFmpeg && ./configure $(FFMPEG_OPTS) && make -j$(shell nproc) && make install
 
 module: bin/viamrtsp
