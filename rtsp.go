@@ -1,6 +1,16 @@
 // Package viamrtsp implements RTSP camera support in a Viam module
 package viamrtsp
 
+/*
+#cgo pkg-config: libavcodec libavutil libswscale
+#include <libavcodec/avcodec.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/error.h>
+#include <libswscale/swscale.h>
+#include <stdlib.h>
+*/
+import "C"
+
 import (
 	"bytes"
 	"context"
@@ -11,6 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/bluenviron/gortsplib/v4"
 	"github.com/bluenviron/gortsplib/v4/pkg/base"
@@ -182,7 +193,8 @@ type rtspCamera struct {
 	activeBackgroundWorkers sync.WaitGroup
 
 	latestMJPEGImage atomic.Pointer[image.Image]
-	latestFrame      *avFrameWrapper
+	// latestFrame      *avFrameWrapper
+	latestFrame *C.AVFrame
 	// frameSwapMu protects critical sections where frame state changes (e.g. ref counting) need to be atomic
 	// with swapping out the latest frame.
 	frameSwapMu sync.Mutex
@@ -533,7 +545,8 @@ func (rc *rtspCamera) initH265(session *description.Session) (err error) {
 			}
 
 			if frame != nil {
-				rc.handleLatestFrame(frame)
+				// rc.handleLatestFrame(frame)
+				rc.latestFrame = frame
 			}
 		}
 	})
@@ -888,7 +901,8 @@ func (rc *rtspCamera) decodeAndStore(nalu []byte) error {
 		return err
 	}
 	if frame != nil {
-		rc.handleLatestFrame(frame)
+		// rc.handleLatestFrame(frame)
+		rc.latestFrame = frame
 	}
 	return nil
 }
@@ -896,19 +910,19 @@ func (rc *rtspCamera) decodeAndStore(nalu []byte) error {
 // handleLatestFrame sets the new latest frame, and cleans up
 // the previous frame by trying to put it back in the pool. It might not make
 // it back into the pool immediately or at all depending on its state.
-func (rc *rtspCamera) handleLatestFrame(newFrame *avFrameWrapper) {
-	rc.frameSwapMu.Lock()
-	defer rc.frameSwapMu.Unlock()
+// func (rc *rtspCamera) handleLatestFrame(newFrame *avFrameWrapper) {
+// 	rc.frameSwapMu.Lock()
+// 	defer rc.frameSwapMu.Unlock()
 
-	prevFrame := rc.latestFrame
-	if prevFrame != nil {
-		if refCount := prevFrame.decrementRefs(); refCount == 0 {
-			rc.avFramePool.put(prevFrame)
-		}
-	}
-	newFrame.incrementRefs()
-	rc.latestFrame = newFrame
-}
+// 	prevFrame := rc.latestFrame
+// 	if prevFrame != nil {
+// 		if refCount := prevFrame.decrementRefs(); refCount == 0 {
+// 			rc.avFramePool.put(prevFrame)
+// 		}
+// 	}
+// 	newFrame.incrementRefs()
+// 	rc.latestFrame = newFrame
+// }
 
 func naluType(nalu []byte) h264.NALUType {
 	return h264.NALUType(nalu[0] & h264NALUTypeMask)
@@ -921,41 +935,56 @@ func isCompactableH264(nalu []byte) bool {
 
 // Image returns the latest frame as JPEG bytes.
 func (rc *rtspCamera) Image(_ context.Context, _ string, _ map[string]interface{}) ([]byte, camera.ImageMetadata, error) {
-	if videoCodec(rc.currentCodec.Load()) == MJPEG {
-		return rc.getMJPEGImage()
-	}
-	return rc.getFrameAsImage()
-}
-
-// getMJPEGImage retrieves the latest MJPEG image.
-func (rc *rtspCamera) getMJPEGImage() ([]byte, camera.ImageMetadata, error) {
-	latestImg := rc.latestMJPEGImage.Load()
-	if latestImg == nil {
-		return nil, camera.ImageMetadata{}, errors.New("no mjpeg frame yet")
-	}
-	return encodeToJPEG(*latestImg)
-}
-
-// getFrameAsImage retrieves the latest frame and converts it to an image.
-func (rc *rtspCamera) getFrameAsImage() ([]byte, camera.ImageMetadata, error) {
-	rc.frameSwapMu.Lock()
-	defer rc.frameSwapMu.Unlock()
-
-	if rc.latestFrame == nil {
+	// if videoCodec(rc.currentCodec.Load()) == MJPEG {
+	// 	return rc.getMJPEGImage()
+	// }
+	// return rc.getFrameAsImage()
+	// convert yuv420 to yuyv422
+	if rc.latestFrame != nil {
+		// convert yuv420 to yuyv422
+		dst, err := convertYUV420toYUYV422(rc.latestFrame)
+		if err != nil {
+			return nil, camera.ImageMetadata{}, err
+		}
+		dstFrameSize := C.av_image_get_buffer_size((int32)(dst.format), dst.width, dst.height, 1)
+		dataGo := C.GoBytes(unsafe.Pointer(dst.data[0]), dstFrameSize)
+		return dataGo, camera.ImageMetadata{
+			MimeType: "image/vnd.viam.yuyv",
+		}, nil
+	} else {
 		return nil, camera.ImageMetadata{}, errors.New("no frame yet")
 	}
-
-	currentFrame := rc.latestFrame
-	currentFrame.incrementRefs()
-	img := currentFrame.toImage()
-
-	// Release frame if no references are left
-	if refCount := currentFrame.decrementRefs(); refCount == 0 {
-		rc.avFramePool.put(currentFrame)
-	}
-
-	return encodeToJPEG(img)
 }
+
+// // getMJPEGImage retrieves the latest MJPEG image.
+// func (rc *rtspCamera) getMJPEGImage() ([]byte, camera.ImageMetadata, error) {
+// 	latestImg := rc.latestMJPEGImage.Load()
+// 	if latestImg == nil {
+// 		return nil, camera.ImageMetadata{}, errors.New("no mjpeg frame yet")
+// 	}
+// 	return encodeToJPEG(*latestImg)
+// }
+
+// // getFrameAsImage retrieves the latest frame and converts it to an image.
+// func (rc *rtspCamera) getFrameAsImage() ([]byte, camera.ImageMetadata, error) {
+// 	rc.frameSwapMu.Lock()
+// 	defer rc.frameSwapMu.Unlock()
+
+// 	if rc.latestFrame == nil {
+// 		return nil, camera.ImageMetadata{}, errors.New("no frame yet")
+// 	}
+
+// 	currentFrame := rc.latestFrame
+// 	currentFrame.incrementRefs()
+// 	img := currentFrame.toImage()
+
+// 	// Release frame if no references are left
+// 	if refCount := currentFrame.decrementRefs(); refCount == 0 {
+// 		rc.avFramePool.put(currentFrame)
+// 	}
+
+// 	return encodeToJPEG(img)
+// }
 
 func (rc *rtspCamera) Properties(_ context.Context) (camera.Properties, error) {
 	return camera.Properties{
