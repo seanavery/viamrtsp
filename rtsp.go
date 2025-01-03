@@ -180,6 +180,8 @@ type rtspCamera struct {
 	// is responsible for the underlying frame contents and further initializing it and/or throwing it away.
 	avFramePool *framePool
 
+	mimeHandler *MimeHandler
+
 	logger logging.Logger
 
 	rtpPassthrough              bool
@@ -732,6 +734,12 @@ func NewRTSPCamera(ctx context.Context, _ resource.Dependencies, conf resource.C
 		avFramePool:                 framePool,
 		logger:                      logger,
 	}
+
+	// TODO(seanp): width height hardcoded for now
+	// rc.mimeHandler = NewMimeHandler(704, 480)
+	// rc.mimeHandler = NewMimeHandler(3840, 2160)
+	rc.mimeHandler = NewMimeHandler(1920, 1080)
+
 	codecInfo, err := modelToCodec(conf.Model)
 	if err != nil {
 		logger.Error(err.Error())
@@ -960,7 +968,7 @@ func (rc *rtspCamera) getFrameAsYUV() ([]byte, camera.ImageMetadata, error) {
 	}
 	currentFrame := rc.latestFrame
 	currentFrame.incrementRefs()
-	goBytes, metadata, err := convertYUV420toYUYV422(currentFrame)
+	goBytes, metadata, err := rc.mimeHandler.convertYUV420toYUYV422(currentFrame)
 	if refCount := currentFrame.decrementRefs(); refCount == 0 {
 		rc.avFramePool.put(currentFrame)
 	}
