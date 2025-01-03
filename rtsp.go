@@ -917,7 +917,8 @@ func (rc *rtspCamera) Image(_ context.Context, _ string, _ map[string]interface{
 	if videoCodec(rc.currentCodec.Load()) == MJPEG {
 		return rc.getMJPEGImage()
 	}
-	return rc.getFrameAsImage()
+	// return rc.getFrameAsImage()
+	return rc.getFrameAsYUV()
 }
 
 // getMJPEGImage retrieves the latest MJPEG image.
@@ -948,6 +949,26 @@ func (rc *rtspCamera) getFrameAsImage() ([]byte, camera.ImageMetadata, error) {
 	}
 
 	return encodeToJPEG(img)
+}
+
+// getFrameAsYUV retrieves the latest frame and converts to YUYV format.
+func (rc *rtspCamera) getFrameAsYUV() ([]byte, camera.ImageMetadata, error) {
+	rc.frameSwapMu.Lock()
+	defer rc.frameSwapMu.Unlock()
+	if rc.latestFrame == nil {
+		return nil, camera.ImageMetadata{}, errors.New("no frame yet")
+	}
+	currentFrame := rc.latestFrame
+	currentFrame.incrementRefs()
+	goBytes, metadata, err := convertYUV420toYUYV422(currentFrame)
+	if refCount := currentFrame.decrementRefs(); refCount == 0 {
+		rc.avFramePool.put(currentFrame)
+	}
+	if err != nil {
+		return nil, camera.ImageMetadata{}, err
+	}
+	return goBytes, metadata, nil
+
 }
 
 func (rc *rtspCamera) Properties(_ context.Context) (camera.Properties, error) {
