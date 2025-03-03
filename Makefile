@@ -74,7 +74,11 @@ FFMPEG_OPTS ?= --prefix=$(FFMPEG_BUILD) \
 PKG_CONFIG_PATH = $(FFMPEG_BUILD)/lib/pkgconfig
 CGO_CFLAGS = $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(FFMPEG_LIBS))
 ifeq ($(SOURCE_OS),linux)
+ifeq ($(TARGET_OS),android)
+	SUBST = /host/x264/build/lib/libx264.a
+else
 	SUBST = -l:libx264.a
+endif 
 endif
 ifeq ($(SOURCE_OS),darwin)
 	SUBST = $(HOMEBREW_PREFIX)/Cellar/x264/r3108/lib/libx264.a
@@ -112,7 +116,7 @@ ifeq ($(TARGET_ARCH),arm64)
 endif
 endif
 
-.PHONY: build-ffmpeg tool-install gofmt lint test profile-cpu profile-memory update-rdk module clean clean-all
+.PHONY: build-ffmpeg tool-install gofmt lint test profile-cpu profile-memory update-rdk module clean clean-all libx264
 
 all: $(BIN_OUTPUT_PATH)/viamrtsp $(BIN_OUTPUT_PATH)/discovery
 
@@ -178,7 +182,7 @@ ifeq ($(shell brew list | grep -w x264 > /dev/null; echo $$?), 1)
 	brew update && brew install x264
 endif
 endif
-	cd $(FFMPEG_VERSION_PLATFORM) && ./configure $(FFMPEG_OPTS) && $(MAKE) -j$(NPROC) && $(MAKE) install
+	cd $(FFMPEG_VERSION_PLATFORM) && PKG_CONFIG_PATH=/host/x264/build/lib/pkgconfig/  ./configure $(FFMPEG_OPTS) && $(MAKE) -j$(NPROC) && $(MAKE) install
 
 build-ffmpeg: $(NDK_ROOT)
 # Only need nasm to build assembly kernels for amd64 targets.
@@ -209,6 +213,27 @@ ifeq ($(SOURCE_ARCH),amd64)
 	yes A | unzip android-ndk-r26-linux.zip -d $(dir $(NDK_ROOT)) && \
 	rm android-ndk-r26-linux.zip
 endif
+endif 
+endif
+
+libx264: $(NDK_ROOT)
+ifeq ($(SOURCE_OS),linux)
+ifeq ($(SOURCE_ARCH),amd64)
+ifeq ($(TARGET_OS),android)
+	@echo "Building libx264 for android"
+	if [ ! -d "x264" ]; then \
+		git clone https://code.videolan.org/videolan/x264.git -b stable; \
+	fi
+	cd x264 && \
+	CC=$(CC) ./configure \
+		--host=aarch64-linux-android \
+		--sysroot=$(NDK_ROOT)/toolchains/llvm/prebuilt/$(SOURCE_OS)-x86_64/sysroot \
+		--prefix=/host/x264/build \
+		--enable-static \
+		--enable-pic && \
+	make -j$(NPROC) && \
+	make install
+endif
 endif
 endif
 
@@ -222,4 +247,5 @@ clean:
 
 clean-all:
 	rm -rf FFmpeg
+	rm -rf x264
 	git clean -fxd
