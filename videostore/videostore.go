@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"errors"
 
+	vscamera "github.com/viam-modules/video-store/model/camera"
 	"github.com/viam-modules/video-store/videostore"
+	vsutils "github.com/viam-modules/video-store/videostore/utils"
 	"go.viam.com/rdk/components/camera"
 	"go.viam.com/rdk/components/generic"
 	"go.viam.com/rdk/logging"
@@ -163,6 +165,13 @@ func (s *service) DoCommand(ctx context.Context, command map[string]interface{})
 			"command": "fetch",
 			"video":   videoBytesBase64,
 		}, nil
+	case "get-storage-state":
+		s.logger.Debug("get-storage-state command received")
+		state, err := s.vs.GetStorageState(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return vscamera.GetStorageStateDoCommandResponse(state), nil
 	default:
 		return nil, errors.New("invalid command")
 	}
@@ -173,7 +182,7 @@ func toSaveCommand(command map[string]interface{}) (*videostore.SaveRequest, err
 	if !ok {
 		return nil, errors.New("from timestamp not found")
 	}
-	from, err := videostore.ParseDateTimeString(fromStr)
+	from, err := vsutils.ParseDateTimeString(fromStr)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +190,9 @@ func toSaveCommand(command map[string]interface{}) (*videostore.SaveRequest, err
 	if !ok {
 		return nil, errors.New("to timestamp not found")
 	}
-	to, err := videostore.ParseDateTimeString(toStr)
+	// to, err := videostore.ParseDateTimeString(toStr)
+	to, err := vsutils.ParseDateTimeString(toStr)
+
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +217,7 @@ func toFetchCommand(command map[string]interface{}) (*videostore.FetchRequest, e
 	if !ok {
 		return nil, errors.New("from timestamp not found")
 	}
-	from, err := videostore.ParseDateTimeString(fromStr)
+	from, err := vsutils.ParseDateTimeString(fromStr)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +225,7 @@ func toFetchCommand(command map[string]interface{}) (*videostore.FetchRequest, e
 	if !ok {
 		return nil, errors.New("to timestamp not found")
 	}
-	to, err := videostore.ParseDateTimeString(toStr)
+	to, err := vsutils.ParseDateTimeString(toStr)
 	if err != nil {
 		return nil, err
 	}
