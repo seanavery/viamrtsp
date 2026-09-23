@@ -497,10 +497,13 @@ func filterH264AU(au [][]byte) h264AUInfo {
 // mux it is logged at warn so support can tell what a camera is emitting; after that it goes to
 // debug, replacing the once-per-keyframe "invalid nalu" error this used to be. Assumes mu is held.
 func (m *rawSegmenterMux) logDropped(codec videostore.CodecType, dropped []droppedNALU) {
+	if len(dropped) == 0 {
+		return
+	}
+	if m.metadata.unknownNALUTypes == nil {
+		m.metadata.unknownNALUTypes = map[uint8]struct{}{}
+	}
 	for _, d := range dropped {
-		if m.metadata.unknownNALUTypes == nil {
-			m.metadata.unknownNALUTypes = map[uint8]struct{}{}
-		}
 		if _, seen := m.metadata.unknownNALUTypes[d.typ]; !seen {
 			m.metadata.unknownNALUTypes[d.typ] = struct{}{}
 			m.logger.Warnf("dropping unrecognized %s NALU type %d (%d bytes) from access unit for camera %s; "+
