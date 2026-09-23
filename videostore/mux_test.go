@@ -325,3 +325,87 @@ func TestLogDroppedWarnsOncePerType(t *testing.T) {
 	m.logDropped(videostore.CodecTypeH265, dropped)
 	test.That(t, len(observed.FilterLevelExact(zapcore.WarnLevel).All()), test.ShouldEqual, 3)
 }
+
+func TestWriteH265SkipsRandomAccessUntilParameterSetsSeen(t *testing.T) {
+	// The parameter sets are deliberately garbage: filterH265AU only reads the header byte, and
+	// maybeReInitVideoStore fails to unmarshal them and returns before touching the segmenter, so
+	// no RawSegmenter is needed. What matters is that a nil parameter set never reaches the DTS
+	// extractor, which indexes nalu[0] on every entry unguarded.
+	vps := h265NALU(h265.NALUType_VPS_NUT, 0xCC)
+	sps := h265NALU(h265.NALUType_SPS_NUT, 0xAA)
+	pps := h265NALU(h265.NALUType_PPS_NUT, 0xBB)
+	idr := h265NALU(h265.NALUType_IDR_W_RADL, 0x01, 0x02)
+
+	for _, tc := range []struct {
+		name          string
+		vps, sps, pps []byte
+	}{
+		{"no parameter sets at all", nil, nil, nil},
+		{"VPS missing", nil, sps, pps},
+		{"SPS missing", vps, nil, pps},
+		{"PPS missing", vps, sps, nil},
+	} {
+		t.Run(tc.name+" skips the AU", func(t *testing.T) {
+			logger, observed := logging.NewObservedTestLogger(t)
+			m := &rawSegmenterMux{logger: logger}
+			m.codec.Store(int64(videostore.CodecTypeH265))
+			m.metadata.vps, m.metadata.sps, m.metadata.pps = tc.vps, tc.sps, tc.pps
+
+			err := m.writeH265([][]byte{idr}, 1000)
+			test.That(t, err, test.ShouldBeNil)
+			test.That(t, m.metadata.dtsExtractor, test.ShouldBeNil)
+			test.That(t, observed.FilterMessageSnippet("parameter sets were seen").Len(), test.ShouldEqual, 1)
+		})
+	}
+
+	t.Run("all parameter sets present proceeds to the DTS extractor", func(t *testing.T) {
+		logger, observed := logging.NewObservedTestLogger(t)
+		m := &rawSegmenterMux{logger: logger}
+		m.codec.Store(int64(videostore.CodecTypeH265))
+		m.metadata.vps, m.metadata.sps, m.metadata.pps = vps, sps, pps
+
+		err := m.writeH265([][]byte{idr}, 1000)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, m.metadata.dtsExtractor, test.ShouldNotBeNil)
+		test.That(t, observed.FilterMessageSnippet("parameter sets were seen").Len(), test.ShouldEqual, 0)
+	})
+}
+
+func TestWriteH264SkipsIDRUntilParameterSetsSeen(t *testing.T) {
+	sps := h264NALU(h264.NALUTypeSPS, 0xAA)
+	pps := h264NALU(h264.NALUTypePPS, 0xBB)
+	idr := h264NALU(h264.NALUTypeIDR, 0x01)
+
+	for _, tc := range []struct {
+		name     string
+		sps, pps []byte
+	}{
+		{"no parameter sets at all", nil, nil},
+		{"SPS missing", nil, pps},
+		{"PPS missing", sps, nil},
+	} {
+		t.Run(tc.name+" skips the AU", func(t *testing.T) {
+			logger, observed := logging.NewObservedTestLogger(t)
+			m := &rawSegmenterMux{logger: logger}
+			m.codec.Store(int64(videostore.CodecTypeH264))
+			m.metadata.sps, m.metadata.pps = tc.sps, tc.pps
+
+			err := m.writeH264([][]byte{idr}, 1000)
+			test.That(t, err, test.ShouldBeNil)
+			test.That(t, m.metadata.dtsExtractor, test.ShouldBeNil)
+			test.That(t, observed.FilterMessageSnippet("parameter sets were seen").Len(), test.ShouldEqual, 1)
+		})
+	}
+
+	t.Run("SPS and PPS present proceeds to the DTS extractor", func(t *testing.T) {
+		logger, observed := logging.NewObservedTestLogger(t)
+		m := &rawSegmenterMux{logger: logger}
+		m.codec.Store(int64(videostore.CodecTypeH264))
+		m.metadata.sps, m.metadata.pps = sps, pps
+
+		err := m.writeH264([][]byte{idr}, 1000)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, m.metadata.dtsExtractor, test.ShouldNotBeNil)
+		test.That(t, observed.FilterMessageSnippet("parameter sets were seen").Len(), test.ShouldEqual, 0)
+	})
+}

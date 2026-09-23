@@ -536,6 +536,13 @@ func (m *rawSegmenterMux) writeH265(au [][]byte, pts int64) error {
 
 	// add VPS, SPS and PPS before random access au
 	if isRandomAccess {
+		// The DTS extractor indexes nalu[0] on every entry without a length check, so a parameter
+		// set that has not arrived yet (absent from the SDP and not yet sent in-band) must not be
+		// prepended as nil. Nothing can be recorded until the camera sends them anyway.
+		if m.metadata.vps == nil || m.metadata.sps == nil || m.metadata.pps == nil {
+			m.logger.Debug("random access AU before all H265 parameter sets were seen, skipping")
+			return nil
+		}
 		au = append([][]byte{m.metadata.vps, m.metadata.sps, m.metadata.pps}, au...)
 	}
 
@@ -598,6 +605,11 @@ func (m *rawSegmenterMux) writeH264(au [][]byte, pts int64) error {
 
 	// add SPS and PPS before access unit that contains an IDR
 	if idrPresent {
+		// See writeH265: a nil parameter set here would panic in the DTS extractor.
+		if m.metadata.sps == nil || m.metadata.pps == nil {
+			m.logger.Debug("IDR AU before SPS and PPS parameter sets were seen, skipping")
+			return nil
+		}
 		au = append([][]byte{m.metadata.sps, m.metadata.pps}, au...)
 	}
 
