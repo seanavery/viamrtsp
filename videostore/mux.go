@@ -156,6 +156,9 @@ func (m *rawSegmenterMux) Start(codec videostore.CodecType, au [][]byte) error {
 	if vsCodec := videostore.CodecType(m.codec.Load()); vsCodec != videostore.CodecTypeUnknown {
 		return fmt.Errorf("init called when codec already set to %s", vsCodec)
 	}
+	// Start only receives the parameter sets advertised in the SDP, so anything that is not a
+	// parameter set means the SDP itself is malformed. Unlike writeH264/writeH265, this stays a
+	// hard error on purpose: dropping it would leave the segmenter with no SPS and nothing recorded.
 	switch codec {
 	case videostore.CodecTypeH264:
 		for _, nalu := range au {
